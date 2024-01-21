@@ -60,7 +60,7 @@ fn generate_builder_setters(ast: &syn::DeriveInput) -> syn::Result<proc_macro2::
 
             for (ident, ftype) in idents.iter().zip(types.iter()) {
                 let single_method = quote! {
-                    pub fn #ident(&mut self, #ident: #ftype) -> &mut Self {
+                    pub fn #ident(mut self, #ident: #ftype) -> Self {
                         self.#ident = std::option::Option::Some(#ident);
                         self
                     }
