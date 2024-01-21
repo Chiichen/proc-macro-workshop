@@ -17,16 +17,18 @@ fn impl_derive(ast: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let builder_name = &format_ident!("{}Builder", struct_name);
     let builder_struct_feild = generate_builder_struct_feilds(ast)?;
     let buidler_struct_setters = generate_builder_setters(ast)?;
-    let build = generate_builder_operation(ast)?;
+    let op_builder = generate_builder_operation(ast)?;
+    let op_build = generate_build_operation(ast)?;
     let gen = quote! {
     pub struct #builder_name {
         #builder_struct_feild
     }
     impl #builder_name{
         #buidler_struct_setters
+        #op_build
     }
     impl #struct_name {
-        #build
+        #op_builder
     }};
 
     return Ok(gen.into());
@@ -58,7 +60,7 @@ fn generate_builder_setters(ast: &syn::DeriveInput) -> syn::Result<proc_macro2::
 
             for (ident, ftype) in idents.iter().zip(types.iter()) {
                 let single_method = quote! {
-                    fn #ident(&mut self, #ident: #ftype) -> &mut Self {
+                    pub fn #ident(&mut self, #ident: #ftype) -> &mut Self {
                         self.#ident = std::option::Option::Some(#ident);
                         self
                     }
@@ -84,6 +86,45 @@ fn generate_builder_operation(ast: &syn::DeriveInput) -> syn::Result<proc_macro2
                     return #builder_name{
                         #(#idents : None),*
                     }
+                }
+            };
+        }
+        syn::Data::Enum(_) => todo!(),
+        syn::Data::Union(_) => todo!(),
+    }
+    return Ok(ret);
+}
+
+fn generate_build_operation(ast: &syn::DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
+    let ret: proc_macro2::TokenStream;
+    let struct_name = &ast.ident;
+    match &ast.data {
+        syn::Data::Struct(data_struct) => {
+            let mut subassignment = proc_macro2::TokenStream::default();
+            let idents: Vec<_> = data_struct.fields.iter().map(|f| &f.ident).collect();
+            // let types: Vec<_> = data_struct.fields.iter().map(|f| &f.ty).collect();
+            // for (ident, ftype) in idents.iter().zip(types.iter()) {
+            let mut pre_judge = proc_macro2::TokenStream::default();
+            for ident in idents.iter() {
+                let single_statement = quote! {
+                    if self.#ident.is_none(){
+                        return None;
+                    };
+                };
+                pre_judge.extend(single_statement);
+            }
+            for ident in idents.iter() {
+                let single_method = quote! {
+                    #ident: self.#ident.unwrap(),
+                };
+                subassignment.extend(single_method);
+            }
+            ret = quote! {
+            pub fn build(self)->std::option::Option<#struct_name>{
+                    #pre_judge;
+                    return Some(#struct_name{
+                        #subassignment
+                    })
                 }
             };
         }
